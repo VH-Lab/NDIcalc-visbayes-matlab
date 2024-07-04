@@ -1,0 +1,22 @@
+#include <metal_stdlib>
+using namespace metal;
+
+kernel void nakaRushtonProportionalNoise(
+    device float *lik [[ buffer(0) ]],
+    constant float *contrast_and_response [[ buffer(1) ]],
+    constant float *grid [[ buffer(2) ]], 
+    constant float *noise_model [[ buffer(3) ]], 
+    uint id[[ thread_position_in_grid ]])
+{
+   // this is a comment
+   /* this is another comment */
+
+   uint num_r100 = grid[0];
+   uint num_c50 = grid[1];
+   uint num_n = grid[2];
+   uint num_s = grid[3];
+
+   lik[id] = num_r100;
+}
+
+

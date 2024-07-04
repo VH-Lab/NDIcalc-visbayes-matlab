@@ -27,9 +27,9 @@ function [output_struct,Lik] = grid_proportional_noise(param_grid, resp_struct, 
 %   - LIK
 %
 % supersaturation-modified NR fxn, baseline subtracted out:
-%   R(c) = Rm*c^n/(c50^(s*n)+c^(s*n))
-%   Rm = r100 / (c^n/(c^n + c50^n))
-%    % This assumes R(1) == r100 if s == 1,
+%   R(c) = Rm*c^n/c50^(s*n)+c^(s*n)
+%   Rm = r100 * (1+0.5)
+%    % This assumes R(1) == r100 if c50 is 0.5 and n, s == 1,
 %    %   and prevents c50 and Rm from playing off each other
 %
 % The prior probabilities of the values of the parameters are assumed
@@ -72,18 +72,18 @@ next_landmark = 1;
 c_high_res = [0:0.01:1]';
 noise_trials = num_trials(1) * ones(size(c_high_res));
 
-for r100 = 1:numel(param_grid.r100)
-	for c50 = 1:numel(param_grid.c50)
-		for n = 1:numel(param_grid.n)
-			for s = 1:numel(param_grid.s)
-				Rm = r100_values(r100) .* (1 + c50_values(c50)^n_values(n));
-				cresp = Rm .* vis.contrast.naka_rushton_func(c_value,...
+
+for r100 = 1:length(param_grid.r100)
+	for c50 = 1:length(param_grid.c50)
+		for n = 1:length(param_grid.n)
+			for s = 1:length(param_grid.s)
+				cresp = r100_values(r100)*(1+0.5) * ...
+					vis.contrast.naka_rushton_func(c_value,...
 					c50_values(c50), n_values(n), s_values(s));
 
 				% probability density of contrast response
 				presp = normpdf(cresp(:)-resp,zeros(size(cresp(:))),...
 					vis.bayes.noise.proportional(prop_mdl,cresp,num_trials));
-				presp(isnan(presp)) = 0;
 				multipresp = squeeze(prod(presp));
 				Lik(r100,c50,n,s) = multipresp;
 
@@ -112,7 +112,6 @@ for r100 = 1:numel(param_grid.r100)
 end
 
 Lik = Lik./sum(Lik(:));
-
 
 %% EXTRACT MARGINAL LIKELIHOOD OF EACH PARAMETER 
 lik_r100 = squeeze(sum(sum(sum(Lik,4),3),2));
@@ -188,4 +187,5 @@ output_struct = struct( ...
 		'RelativeMaximumGain', struct('values',rmg_bins,'likelihoods',rmg_lik), ...
 		'ContrastThreshold', struct('values',cthresh_bins,'likelihoods',cthresh_lik), ...
 		'SaturationIndex', struct('values',sat_bins,'likelihoods',sat_lik) ) );
+
 

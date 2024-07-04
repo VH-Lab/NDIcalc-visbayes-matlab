@@ -11,7 +11,7 @@ classdef contrast_tuning_bayes < ndi.calculator
 			% Creates a contrast_tuning_bayes ndi.calculator object
 			%
 				ndi.globals;
-				w = which('ndi.calc.vis.contrast_tuning');
+				w = which('ndi.calc.vis.contrast_tuning_bayes');
 				parparparpar = fileparts(fileparts(fileparts(fileparts(w))));                
 				contrast_tuning_bayes_obj = contrast_tuning_bayes_obj@ndi.calculator(session,'contrast_tuning_bayes',...
 					fullfile(parparparpar,'ndi_common','database_documents','calc','contrast_tuning_bayes_calc.json'));
@@ -234,5 +234,5 @@ classdef contrast_tuning_bayes < ndi.calculator
 		end; % plot()
 
 	end; % methods()
-			
+	
 end % contrast_tuning_bayes

@@ -1,0 +1,16 @@
+   /*uint num_r100 = grid[0];
+   uint num_c50 = grid[1];
+   uint num_n = grid[2];
+   uint num_s = grid[3];
+
+   uint r100_index = id % num_r100;
+   uint c50_index = id / (num_r100);
+   uint n_index = id / (num_c50 * num_r100);
+   uint s_index = id / (num_n * num_c50 * num_r100);
+
+   float r100 = grid[4+r100_index];
+   float c50  = grid[4+num_r100+c50_index];
+   float n    = grid[4+num_r100+num_c50+n_index];
+   float s    = grid[4+num_r100+num_c50+num_n+s_index]; */
+
+
