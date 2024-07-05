@@ -1,22 +1,57 @@
 #include <metal_stdlib>
 using namespace metal;
 
-kernel void nakaRushtonProportionalNoise(
+constant float PI = 3.141592653589793;
+
+kernel void nakaRushtonProportionalNoiseLog(
     device float *lik [[ buffer(0) ]],
     constant float *contrast_and_response [[ buffer(1) ]],
     constant float *grid [[ buffer(2) ]], 
     constant float *noise_model [[ buffer(3) ]], 
     uint id[[ thread_position_in_grid ]])
 {
-   // this is a comment
-   /* this is another comment */
 
+   // extract grid dimensions 
    uint num_r100 = grid[0];
    uint num_c50 = grid[1];
    uint num_n = grid[2];
    uint num_s = grid[3];
 
-   lik[id] = num_r100;
+   uint num_contrasts = contrast_and_response[0];
+   float f_eval,Rm,c,r,noise_sigma,lik_here,log_likelihood=0;
+   uint lik_is_zero = 0;
+
+   // find the index of each grid point to evaluate
+
+   uint index_r100 = id % num_r100;
+   uint index_c50 = (id / num_r100) % num_c50;
+   uint index_n = id / (num_c50 * num_r100) % num_n;
+   uint index_s = id / (num_n * num_c50 * num_r100) % num_s;
+
+   // grab the value of each variable
+
+   float r100 = grid[4+index_r100];
+   float c50  = grid[4+num_r100+index_c50];
+   float n    = grid[4+num_r100+num_c50+index_n];
+   float s    = grid[4+num_r100+num_c50+num_n+index_s];
+
+   Rm = r100 * (1+pow(c50,n));
+   for (uint i=0; i<num_contrasts;i++) {
+      c = abs(contrast_and_response[1+i]);
+      r = contrast_and_response[1+num_contrasts+i];
+      f_eval = Rm * pow(c,n) / (pow(c50,n*s) + pow(c,n*s));
+      if (c<0) f_eval *= -1;
+      noise_sigma = pow(10,noise_model[0]) * pow(f_eval,noise_model[1])/sqrt(noise_model[2]);
+      if (noise_sigma>0) {
+        lik_here = exp(-pow((f_eval-r),2)/(2*noise_sigma*noise_sigma))/(noise_sigma*sqrt(PI));
+        log_likelihood += log10(lik_here);
+      } else {
+        lik_is_zero = 1;
+        break;
+      }
+   }
+  
+   lik[id] = lik_is_zero ? 10 : log_likelihood;
 }
 
 

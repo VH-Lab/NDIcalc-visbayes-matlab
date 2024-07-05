@@ -28,7 +28,7 @@ function [output_struct,Lik] = grid_proportional_noise(param_grid, resp_struct, 
 %
 % supersaturation-modified NR fxn, baseline subtracted out:
 %   R(c) = Rm*c^n/(c50^(s*n)+c^(s*n))
-%   Rm = r100 / (c^n/(c^n + c50^n))
+%   Rm = r100 * (1/(1 + c50^n))
 %    % This assumes R(1) == r100 if s == 1,
 %    %   and prevents c50 and Rm from playing off each other
 %
