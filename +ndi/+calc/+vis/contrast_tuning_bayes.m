@@ -76,7 +76,8 @@ classdef contrast_tuning_bayes < ndi.calculator
 				[output_struct] = vis.bayes.naka_rushton.grid_proportional_noise(parameters.input_parameters.grid,...
 					response_struct,parameters.input_parameters.noise_model);
 
-				doc = ndi.document('contrast_tuning_bayes','contrast_tuning_bayes',output_struct);
+				doc = ndi.document('contrast_tuning_bayes','contrast_tuning_bayes',output_struct) + ...
+					ndi_calculator_obj.newdocument();
 
 				% Step 4. Check if doc exists
 				if ~isempty(doc), 
@@ -101,7 +102,7 @@ classdef contrast_tuning_bayes < ndi.calculator
 					'n',linspace(0.5,4,40), ...
 					's',linspace(1,2,20));
 				parameters.input_parameters.grid = grid;
-				parameters.input_parameters.noise_model = [ 0.25 0.73 ];
+				parameters.input_parameters.noise_model = [ 1.3549 1.9182 0.5461];
 				parameters.depends_on = vlt.data.emptystruct('name','value');
 				parameters.query = ndi_calculator_obj.default_parameters_query(parameters);
 		end; % default_search_for_input_parameters

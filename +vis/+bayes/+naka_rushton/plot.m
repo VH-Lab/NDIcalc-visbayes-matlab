@@ -66,11 +66,3 @@ ylabel("Prob of Saturation index");
 box off;
 
 
-return;
-
-subplot(3,3,9);
-plot(output_struct.descriptors.dir_cv.values,output_struct.descriptors.dir_cv.likelihoods,'b-o'),
-xlabel("DCV"),
-ylabel("probability of DCV");
-
-box off;

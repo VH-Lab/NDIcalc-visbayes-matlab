@@ -15,7 +15,7 @@ function [output_struct,Lik] = grid_proportional_noise(param_grid, resp_struct, 
 %       contrast - the contrast that were used for stimulation
 %       mean_responses - the mean responses to each stimulus
 %       num_trials - the number of trials of each stimulus
-%   - NOISE_MDL: a log linear regression model of noise for the given data [offset slope]
+%   - NOISE_MDL: a log linear regression model of noise for the given data [offset slope] or [offset k slope]
 %
 % OUTPUTS:
 %   - OUTPUT_STRUCT: a structure with fields:
@@ -50,11 +50,6 @@ c50_values = param_grid.c50;
 n_values = param_grid.n;
 s_values = param_grid.s;
 
-% from noise_mdl
-offset = noise_mdl(1);
-slope = noise_mdl(2);
-prop_mdl = [offset slope];
-
 %% BUILD BAYES GRID MATRIX
 Lik = NaN(numel(param_grid.r100),numel(param_grid.c50),numel(param_grid.n),numel(param_grid.s));
 
@@ -82,8 +77,7 @@ for r100 = 1:numel(param_grid.r100)
 
 				% probability density of contrast response
 				presp = normpdf(cresp(:)-resp,zeros(size(cresp(:))),...
-					vis.bayes.noise.proportional(prop_mdl,cresp,num_trials));
-				presp(isnan(presp)) = 0;
+					vis.bayes.noise.proportional(noise_mdl,cresp,num_trials));
 				multipresp = squeeze(prod(presp));
 				Lik(r100,c50,n,s) = multipresp;
 
@@ -93,7 +87,7 @@ for r100 = 1:numel(param_grid.r100)
 				RelativeMaximumGain(r100,c50,n,s) = vis.contrast.indexes.contrastfit2relativemaximumgain(...
 					c_high_res, nr_high_res);
 				SaturationIndex(r100,c50,n,s) = (max(nr_high_res)-nr_high_res(end))/nr_high_res(end);
-				noise_high_res = vis.bayes.noise.proportional(prop_mdl,nr_high_res,noise_trials);
+				noise_high_res = vis.bayes.noise.proportional(noise_mdl,nr_high_res,noise_trials);
 				index = find(nr_high_res>=noise_high_res*2,1,'first');
 				cthresh = Inf;
 				if ~isempty(index), 
@@ -171,7 +165,7 @@ rmg_lik = rmg_lik./sum(rmg_lik);
 
 %% CREATE OUTPUT_STRUCT
 output_struct = struct( ...
-	'noise_model',struct('type',{'proportional'},'offset',offset,'slope',slope), ...
+	'noise_model',struct('type',{'proportional'},'noise_mdl',noise_mdl), ...
 	'other_parameters',struct('independent_variable',{'contrast'},'independent_variable_value',resp_struct.contrast,...
 		'mean_responses',resp_struct.mean_responses,'num_trials',resp_struct.num_trials), ...
 	'marginal_likelihoods',struct( ...
