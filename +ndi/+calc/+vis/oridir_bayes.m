@@ -77,7 +77,8 @@ classdef oridir_bayes < ndi.calculator
 				[output_struct] = vis.bayes.double_gaussian.grid_proportional_noise(parameters.input_parameters.grid,...
 					data,parameters.input_parameters.noise_model);
 
-				doc = ndi.document('orientation_direction_bayes','orientation_direction_bayes',output_struct);
+				doc = ndi.document('orientation_direction_bayes','orientation_direction_bayes',output_struct) + ...
+					ndi_calculator_obj.newdocument();
 
 				% Step 4. Check if doc exists
 				if ~isempty(doc), 

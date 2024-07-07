@@ -112,7 +112,8 @@ classdef oridir_bootstrap < ndi.calculator
 				parameters_here.input_parameters = parameters;
 				parameters_here.oridir_bootstrap_fits = fits;
 				%create oridir_bootstrap ndi document
-				doc = ndi.document(ndi_calculator_obj.doc_document_types{1},'oridir_bootstrap_calc', parameters_here);
+				doc = ndi.document(ndi_calculator_obj.doc_document_types{1},'oridir_bootstrap_calc', parameters_here) + ...
+					ndi_calculator_obj.newdocument();
 
 				% set dependency value to the dependency value of parameters
 				for i=1:numel(parameters.depends_on)
