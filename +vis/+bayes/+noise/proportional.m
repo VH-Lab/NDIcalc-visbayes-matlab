@@ -45,7 +45,7 @@ elseif numel(noise_model)==3,
 	offset = noise_model(1);
 	k = noise_model(2);
 	slope = noise_model(3);
-	sigma = offset + k * responses.^slope;
+	sigma = (offset + k * responses.^slope)./sqrt(num_trials);
 else,
 	error(['Unknown noise model parameter size (expected 2 or 3 parameters).']);
 end;

@@ -1,5 +1,5 @@
-function [output_struct,Lik] = grid_proportional_noise(param_grid, resp_struct, noise_mdl)
-
+function [output_struct,Lik] = grid_proportional_noise_metal(param_grid, resp_struct, noise_mdl)
+% GRID_PROPRTIONAL_NOISE_METAL - calculates Bayesian likelihood of Naka Rushton using Apple Metal
 %% DESCRIPTION
 % - Uses supersaturation-modified Naka-Rusthon from Pierce 2007 without parameter B as mean responses have baseline response subtracted
 % - Limits on parameters set according to Cortes et al. 2022
@@ -15,7 +15,7 @@ function [output_struct,Lik] = grid_proportional_noise(param_grid, resp_struct, 
 %       contrast - the contrast that were used for stimulation
 %       mean_responses - the mean responses to each stimulus
 %       num_trials - the number of trials of each stimulus
-%   - NOISE_MDL: a log linear regression model of noise for the given data [offset slope]
+%   - NOISE_MDL: a log linear regression model of noise for the given data [offset slope] or [offset k slope]
 %
 % OUTPUTS:
 %   - OUTPUT_STRUCT: a structure with fields:
@@ -51,12 +51,47 @@ n_values = param_grid.n;
 s_values = param_grid.s;
 
 % from noise_mdl
-offset = noise_mdl(1);
-slope = noise_mdl(2);
-prop_mdl = [offset slope];
+if numel(noise_mdl)>2,
+	noise_mdl = [2;noise_mdl(:)];
+else,
+	noise_mdl = [1;noise_mdl(:)];
+end;
 
-%% BUILD BAYES GRID MATRIX
-Lik = NaN(numel(param_grid.r100),numel(param_grid.c50),numel(param_grid.n),numel(param_grid.s));
+funcName = 'nakaRushtonProportionalNoiseLog';
+here = which('vis.bayes.naka_rushton.nakarushton_gpudemo');
+[parent,me] = fileparts(here);
+kernel = fileread(fullfile(parent,'nakarushtonproportionalnoise.mtl'));
+
+lik = zeros(numel(r100_values)*numel(c50_values)*numel(n_values)*numel(s_values),1,'single');
+contrast_and_response = single([numel(c_value) ; c_value(:); resps(:); num_trials(:)]);
+grid = single([numel(r100_values);
+        numel(c50_values);
+        numel(n_values);
+        numel(s_values);
+        r100_values(:);
+        c50_values(:);
+        n_values(:);
+        s_values(:)]);
+
+answers = single(zeros(100,1));
+
+metalConfig = MetalConfig;
+device = MetalDevice(metalConfig.gpudevice);
+
+bufferLik = MetalBuffer(device,lik);
+bufferContrastAndResponse = MetalBuffer(device,contrast_and_response);
+bufferGrid = MetalBuffer(device,grid);
+bufferNoiseModel = MetalBuffer(device,noise_model);
+bufferAnswers = MetalBuffer(device,answers);
+
+MetalCallKernel(funcName,{bufferLik,bufferContrastAndResponse,bufferGrid,bufferNoiseModel,bufferAnswers},kernel);
+
+lik = single(bufferLik);
+lik = reshape(lik,numel(r100_values),numel(c50_values),numel(n_values),numel(s_values));
+
+Lik = 10.^lik;
+Lik_prenorm = Lik;
+Lik = Lik./sum(Lik(:));
 
 %% descriptors, same dimensions as Lik
 RelativeMaximumGain = Lik;
@@ -64,28 +99,9 @@ SaturationIndex = Lik;
 ContrastThreshold = Lik;
 
 %% POSTERIOR PROBABILITY FOR 4 PARAMETERS 
-total_steps = (length(param_grid.r100)*length(param_grid.c50)*length(param_grid.n)*length(param_grid.s));
-current_step = 0;
-step_landmarks = round(linspace(1,total_steps,40)); 
-next_landmark = 1;
 
 c_high_res = [0:0.01:1]';
 noise_trials = num_trials(1) * ones(size(c_high_res));
-
-
-for r100 = 1:length(param_grid.r100)
-	for c50 = 1:length(param_grid.c50)
-		for n = 1:length(param_grid.n)
-			for s = 1:length(param_grid.s)
-				cresp = r100_values(r100)*(1+0.5) * ...
-					vis.contrast.naka_rushton_func(c_value,...
-					c50_values(c50), n_values(n), s_values(s));
-
-				% probability density of contrast response
-				presp = normpdf(cresp(:)-resp,zeros(size(cresp(:))),...
-					vis.bayes.noise.proportional(prop_mdl,cresp,num_trials));
-				multipresp = squeeze(prod(presp));
-				Lik(r100,c50,n,s) = multipresp;
 
 				nr_high_res = r100_values(r100)*(1+0.5) * ...
 					vis.contrast.naka_rushton_func(c_high_res, ...

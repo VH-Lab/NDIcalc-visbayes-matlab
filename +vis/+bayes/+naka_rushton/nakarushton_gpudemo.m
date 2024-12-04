@@ -27,6 +27,9 @@ grid = single([numel(r100_values);
 	n_values(:);
 	s_values(:)]);
 
+answers = single(zeros(100,1));
+
+
 metalConfig = MetalConfig;
 device = MetalDevice(metalConfig.gpudevice);
 
@@ -34,9 +37,9 @@ bufferLik = MetalBuffer(device,lik);
 bufferContrastAndResponse = MetalBuffer(device,contrast_and_response);
 bufferGrid = MetalBuffer(device,grid);
 bufferNoiseModel = MetalBuffer(device,noise_model);
+bufferAnswers = MetalBuffer(device,answers);
 
-
-MetalCallKernel(funcName,{bufferLik,bufferContrastAndResponse,bufferGrid,bufferNoiseModel},kernel);
+MetalCallKernel(funcName,{bufferLik,bufferContrastAndResponse,bufferGrid,bufferNoiseModel,bufferAnswers},kernel);
 
 lik = single(bufferLik);
 lik = reshape(lik,numel(r100_values),numel(c50_values),numel(n_values),numel(s_values));

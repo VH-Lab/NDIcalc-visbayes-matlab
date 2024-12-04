@@ -1,4 +1,4 @@
-function [output_struct,Lik] = grid_proportional_noise(param_grid, resp_struct, noise_mdl)
+function [output_struct,Lik,debug_output] = grid_proportional_noise(param_grid, resp_struct, noise_mdl)
 
 %% DESCRIPTION
 % - Uses supersaturation-modified Naka-Rusthon from Pierce 2007 without parameter B as mean responses have baseline response subtracted
@@ -76,12 +76,14 @@ for r100 = 1:numel(param_grid.r100)
 					c50_values(c50), n_values(n), s_values(s));
 
 				% probability density of contrast response
+				noise_sigma = vis.bayes.noise.proportional(noise_mdl,cresp,num_trials);
 				presp = normpdf(cresp(:)-resp,zeros(size(cresp(:))),...
 					vis.bayes.noise.proportional(noise_mdl,cresp,num_trials));
+				%logpresp = log10(presp);
 				multipresp = squeeze(prod(presp));
 				Lik(r100,c50,n,s) = multipresp;
 
-				nr_high_res = r100_values(r100)*(1+0.5) * ...
+				nr_high_res = Rm * ...
 					vis.contrast.naka_rushton_func(c_high_res, ...
 					c50_values(c50), n_values(n), s_values(s));
 				RelativeMaximumGain(r100,c50,n,s) = vis.contrast.indexes.contrastfit2relativemaximumgain(...
@@ -89,7 +91,7 @@ for r100 = 1:numel(param_grid.r100)
 				SaturationIndex(r100,c50,n,s) = (max(nr_high_res)-nr_high_res(end))/nr_high_res(end);
 				noise_high_res = vis.bayes.noise.proportional(noise_mdl,nr_high_res,noise_trials);
 				index = find(nr_high_res>=noise_high_res*2,1,'first');
-				cthresh = Inf;
+				cthresh = 1.01;
 				if ~isempty(index), 
 					cthresh = c_high_res(index);
 				end;
@@ -104,6 +106,11 @@ for r100 = 1:numel(param_grid.r100)
 		end
 	end
 end
+
+debug_output.Lik_prenorm = Lik;
+debug_output.ContrastThreshold = ContrastThreshold;
+debug_output.RelativeMaximumGain = RelativeMaximumGain;
+debug_output.SaturationIndex = SaturationIndex;
 
 Lik = Lik./sum(Lik(:));
 
@@ -134,7 +141,7 @@ RMG = RelativeMaximumGain(r100,c50,n,s);
 %% DESCRIPTOR estimation
 
 sat_bins = 0:0.05:10;
-cthresh_bins = 0:0.01:1;
+cthresh_bins = 0:0.01:1.01;
 rmg_bins = 0:0.1:10;
 
 sat_lik = 0 * sat_bins;
@@ -156,7 +163,7 @@ end
 cthresh_lik = cthresh_lik./sum(cthresh_lik);
 
 [rmg_index] = discretize(RelativeMaximumGain(:),rmg_bins);
-for bin = 1:max(rmg_index)
+for bin = 1:max(max(rmg_index),10);
     F = rmg_index==bin;
     rmg_lik(bin) = sum(Lik(F));
 end

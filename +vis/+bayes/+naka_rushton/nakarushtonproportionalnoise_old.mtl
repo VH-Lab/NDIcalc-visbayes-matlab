@@ -8,10 +8,7 @@ kernel void nakaRushtonProportionalNoiseLog(
     constant float *contrast_response_numtrials [[ buffer(1) ]],
     constant float *grid [[ buffer(2) ]], 
     constant float *noise_model [[ buffer(3) ]], 
-    device float *contrast_threshold [[ buffer(4) ]],
-    device float *relative_maximum_gain [[ buffer(5) ]],
-    device float *saturation_index [[ buffer(6) ]],
-    device float *answers [[ buffer(7) ]],
+    device float *answers [[ buffer(4) ]],
     uint id[[ thread_position_in_grid ]])
 {
 
@@ -81,11 +78,11 @@ kernel void nakaRushtonProportionalNoiseLog(
       else if (c_high_res[ci]==0) r_high_res[ci] = 0;
 
       if (noise_model[0] == 1) {
-        noise_sigma = pow(10,noise_model[2]) * pow(abs(r_high_res[ci]),noise_model[3])/sqrt(numtrials);
+        noise_sigma = pow(10,noise_model[2]) * pow(r_high_res[ci],noise_model[3])/sqrt(numtrials);
       } else {
-        noise_sigma = (noise_model[1] + noise_model[2] * pow(abs(r_high_res[ci]),noise_model[3]))/sqrt(numtrials);
+        noise_sigma = (noise_model[1] + noise_model[2] * pow(r_high_res[ci],noise_model[3]))/sqrt(numtrials);
       }
-      if ((ci_thresh == 1000) && (r_high_res[ci] >= (2 * noise_sigma))) ci_thresh = ci;
+      if ((ci_thresh == 1000) && (r_high_res[ci] >= 2 * noise_sigma)) ci_thresh = ci;
 
       if (r_high_res[ci] > r_high_res_max) {
           r_high_res_max = r_high_res[ci];
@@ -98,11 +95,7 @@ kernel void nakaRushtonProportionalNoiseLog(
    }
    sat_index = (r_high_res_max - r_high_res[100]) / r_high_res[100]; 
    if (ci_thresh != 1000) cthresh = c_high_res[ci_thresh];
-   else cthresh = 1.01;
-
-   saturation_index[id] = sat_index;
-   relative_maximum_gain[id] = rmg / r_high_res_max;
-   contrast_threshold[id] = cthresh;
+   else cthresh = 101;
 }
 
 
