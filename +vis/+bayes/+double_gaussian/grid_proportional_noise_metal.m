@@ -102,22 +102,39 @@ bufferDCV = MetalBuffer(device,DCV);
 
 bufferAnswers = MetalBuffer(device,answers);
 
+%disp(['About to call Metal'])
+
 MetalCallKernel(funcName,{bufferLik,bufferAnglesAndResponse,bufferGrid,bufferNoiseModel,bufferOI,bufferDI,bufferCV,bufferDCV,bufferAnswers},kernel);
+
+%disp(['Finished with Metal Call'])
 
 debug.answers = single(bufferAnswers);
 
 lik = single(bufferLik);
 lik = reshape(lik,numel(rsp_values),numel(rp_values),numel(alpha_values),numel(op_values),numel(sig_values));
 
+%disp(['Finished with lik extract'])
+
+OI = single(bufferOI);
+DI = single(bufferDI);
+CV = single(bufferCV);
+DCV = single(bufferDCV);
+
+clear bufferDCV bufferCV bufferDI bufferOI bufferLik bufferAnswers
+
+%disp(['Finished with other buffers'])
+
+%% descriptors, same dimensions as Lik
+OI = reshape(OI,numel(rsp_values),numel(rp_values),numel(alpha_values),numel(op_values),numel(sig_values));
+DI = reshape(single(DI),numel(rsp_values),numel(rp_values),numel(alpha_values),numel(op_values),numel(sig_values));
+CV = reshape(CV,numel(rsp_values),numel(rp_values),numel(alpha_values),numel(op_values),numel(sig_values));
+DCV = reshape(DCV,numel(rsp_values),numel(rp_values),numel(alpha_values),numel(op_values),numel(sig_values));
+
+%disp(['Done pulling variable info'])
+
 Lik = 10.^double(lik);
 Lik_prenorm = Lik;
 Lik = Lik./sum(Lik(:));
-
-%% descriptors, same dimensions as Lik
-OI = reshape(single(bufferOI),numel(rsp_values),numel(rp_values),numel(alpha_values),numel(op_values),numel(sig_values));
-DI = reshape(single(bufferDI),numel(rsp_values),numel(rp_values),numel(alpha_values),numel(op_values),numel(sig_values));
-CV = reshape(single(bufferCV),numel(rsp_values),numel(rp_values),numel(alpha_values),numel(op_values),numel(sig_values));
-DCV = reshape(single(bufferDCV),numel(rsp_values),numel(rp_values),numel(alpha_values),numel(op_values),numel(sig_values));
 
 %% EXTRACT MARGINAL LIKELIHOOD OF EACH PARAMETER 
 lik_rsp = squeeze(sum(sum(sum(sum(Lik,5),4),3),2));
@@ -146,45 +163,65 @@ CV_ML = CV(rsp_ml,rp_ml,alpha_ml,op_ml,sig_ml);
 DCV_ML = DCV(rsp_ml,rp_ml,alpha_ml,op_ml,sig_ml);
 
 %% DESCRIPTOR estimation
+%disp('Descriptor calculations')
 
-oi_bins = 0:0.05:1;
-di_bins = 0:0.05:1;
-cv_bins = 0:0.05:1;
-dcv_bins = 0:0.05:1;
+oi_bins = 0:0.05:1.00;
+di_bins = 0:0.05:1.00;
+cv_bins = 0:0.05:1.00;
+dcv_bins = 0:0.05:1.00;
 
 oi_lik = 0 * oi_bins;
 di_lik = 0 * di_bins;
 cv_lik = 0 * cv_bins;
 dcv_lik = 0 * dcv_bins;
 
-[oi_index] = discretize(OI(:),oi_bins);
-for bin = 1:max(oi_index)
-    F = oi_index==bin;
-    oi_lik(bin) = sum(Lik(F));
-end
-oi_lik = oi_lik./sum(oi_lik);
+if 0, % this is slower
+    [oi_index] = discretize(OI(:),oi_bins);
+    valid_indexes = ~isnan(oi_index);
+    oi_lik = accumarray(oi_index(valid_indexes), Lik(valid_indexes), [numel(oi_bins) 1], @(x) sum(x(~isnan(x))), 0);
+    oi_lik = oi_lik ./ sum(oi_lik); 
+    
+    [di_index] = discretize(DI(:),di_bins);
+    di_lik = accumarray(di_index(:), Lik(:), [numel(di_bins) 1], @(x) sum(x(~isnan(x))), 0);
+    di_lik = di_lik./sum(di_lik);
+    
+    [cv_index] = discretize(CV(:),cv_bins);
+    cv_lik = accumarray(cv_index(:), Lik(:), [numel(cv_bins) 1], @(x) sum(x(~isnan(x))), 0);
+    cv_lik = cv_lik./sum(cv_lik);
+    
+    [dcv_index] = discretize(DCV(:),dcv_bins);
+    dcv_lik = accumarray(dcv_index(:), Lik(:), [numel(dcv_bins) 1], @(x) sum(x(~isnan(x))), 0);
+    dcv_lik = dcv_lik./sum(dcv_lik);
+else,
+    [oi_index] = discretize(OI(:),oi_bins);
+    for bin = 1:max(oi_index)
+        F = oi_index==bin;
+        oi_lik(bin) = sum(Lik(F));
+    end
+    oi_lik = oi_lik./sum(oi_lik);
+    
+    [di_index] = discretize(DI(:),di_bins);
+    for bin = 1:max(di_index)
+        F = di_index==bin;
+        di_lik(bin) = sum(Lik(F));
+    end
+    di_lik = di_lik./sum(di_lik);
+    
+    [cv_index] = discretize(CV(:),cv_bins);
+    for bin = 1:max(cv_index)
+        F = cv_index==bin;
+        cv_lik(bin) = sum(Lik(F));
+    end
+    cv_lik = cv_lik./sum(cv_lik);
+    
+    [dcv_index] = discretize(DCV(:),dcv_bins);
+    for bin = 1:max(dcv_index)
+        F = dcv_index==bin;
+        dcv_lik(bin) = sum(Lik(F));
+    end
+    dcv_lik = dcv_lik./sum(dcv_lik);
 
-[di_index] = discretize(DI(:),di_bins);
-for bin = 1:max(di_index)
-    F = di_index==bin;
-    di_lik(bin) = sum(Lik(F));
-end
-di_lik = di_lik./sum(di_lik);
-
-[cv_index] = discretize(CV(:),cv_bins);
-for bin = 1:max(cv_index)
-    F = cv_index==bin;
-    cv_lik(bin) = sum(Lik(F));
-end
-cv_lik = cv_lik./sum(cv_lik);
-
-[dcv_index] = discretize(DCV(:),dcv_bins);
-for bin = 1:max(dcv_index)
-    F = dcv_index==bin;
-    dcv_lik(bin) = sum(Lik(F));
-end
-dcv_lik = dcv_lik./sum(dcv_lik);
-
+end;
 
 %% CREATE OUTPUT_STRUCT
 output_struct = struct( ...
@@ -211,5 +248,4 @@ output_struct = struct( ...
 		'di', struct('values',di_bins,'likelihoods',di_lik), ...
 		'cv', struct('values',cv_bins,'likelihoods',cv_lik), ...
 		'dir_cv', struct('values',dcv_bins,'likelihoods',dcv_lik) ) );
-
 
