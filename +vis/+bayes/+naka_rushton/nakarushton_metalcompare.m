@@ -51,7 +51,6 @@ here = which('vis.bayes.naka_rushton.nakarushton_gpudemo');
 [parent,me] = fileparts(here);
 kernel = fileread(fullfile(parent,'nakarushtonproportionalnoise.mtl'));
 
-
 lik = zeros(numel(r100_values)*numel(c50_values)*numel(n_values)*numel(s_values),1,'single');
 ContrastThreshold = zeros(numel(r100_values)*numel(c50_values)*numel(n_values)*numel(s_values),1,'single');
 RelativeMaximumGain = zeros(numel(r100_values)*numel(c50_values)*numel(n_values)*numel(s_values),1,'single');

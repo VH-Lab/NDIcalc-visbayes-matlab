@@ -1,4 +1,4 @@
-function [output_struct,lik,debug] = gpudemo()
+function [output_struct,lik,debug] = nogpudemo()
 
 rsp_values = logspace(log10(0.1),log10(40),40);
 rp_values = logspace(log10(0.1),log10(150),100);
@@ -22,7 +22,7 @@ resp_struct = struct('angles',angles(:),...
     'mean_responses',resps(:),...
     'num_trials',5*ones(size(resps(:))));
 
-[output_struct,lik,debug] = vis.bayes.double_gaussian.grid_proportional_noise_metal(param_grid, resp_struct, noise_model);
+[output_struct,lik] = vis.bayes.double_gaussian.grid_proportional_noise(param_grid, resp_struct, noise_model);
 
 
 

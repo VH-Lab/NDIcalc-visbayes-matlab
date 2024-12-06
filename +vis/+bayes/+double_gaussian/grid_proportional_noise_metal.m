@@ -1,4 +1,4 @@
-function [output_struct,Lik] = grid_proportional_noise_metal(param_grid, resp_struct, noise_mdl)
+function [output_struct,Lik,debug] = grid_proportional_noise_metal(param_grid, resp_struct, noise_mdl)
 % GRID_PROPRTIONAL_NOISE_METAL - calculates Bayesian likelihood of double gaussian model using Apple Metal
 %
 % [OUTPUT_STRUCT, LIK]  = GRID_PROPORTIONAL_NOISE_METAL(PARAM_GRID, RESP_STRUCT, NOISE_MDL)
@@ -41,8 +41,8 @@ function [output_struct,Lik] = grid_proportional_noise_metal(param_grid, resp_st
 
 %% DEFINE VARIABLES
 % from data_struct
-resp = resp_struct.mean_responses(:);
-angle_value = resp_struct.angle(:);
+resps = resp_struct.mean_responses(:);
+angle_value = resp_struct.angles(:);
 num_trials = resp_struct.num_trials(:);
 
 % from grid_size
@@ -62,13 +62,17 @@ end;
 funcName = 'doubleGaussianProportionalNoiseLog';
 here = which('vis.bayes.double_gaussian.gpudemo');
 [parent,me] = fileparts(here);
-kernel = fileread(fullfile(parent,'doublegaussianportionalnoise.mtl'));
+kernel = fileread(fullfile(parent,'doublegaussianproportionalnoise.mtl'));
 
 lik = zeros(numel(rsp_values)*numel(rp_values)*numel(alpha_values)*numel(op_values)*numel(sig_values),1,'single');
 OI = zeros(size(lik),'single');
 DI = zeros(size(lik),'single');
 CV = zeros(size(lik),'single');
 DCV = zeros(size(lik),'single');
+
+if numel(num_trials)~=numel(angle_value),
+	error(['There must be a numtrial entry for each response. The size of RESP_STRUCT.num_trials must match RESP_STRUCT.mean_responses.']);
+end;
 
 angles_and_response = single([numel(angle_value) ; angle_value(:); resps(:); num_trials(:)]);
 grid = single([numel(rsp_values);
@@ -90,20 +94,22 @@ device = MetalDevice(metalConfig.gpudevice);
 bufferLik = MetalBuffer(device,lik);
 bufferAnglesAndResponse = MetalBuffer(device,angles_and_response);
 bufferGrid = MetalBuffer(device,grid);
-bufferNoiseModel = MetalBuffer(device,noise_model);
-bufferOI = MetalBuffer(device,ContrastThreshold);
-bufferDI = MetalBuffer(device,RelativeMaximumGain);
-bufferCV = MetalBuffer(device,ContrastThreshold);
-bufferDCV = MetalBuffer(device,RelativeMaximumGain);
+bufferNoiseModel = MetalBuffer(device,single(noise_mdl));
+bufferOI = MetalBuffer(device,OI);
+bufferDI = MetalBuffer(device,DI);
+bufferCV = MetalBuffer(device,CV);
+bufferDCV = MetalBuffer(device,DCV);
 
 bufferAnswers = MetalBuffer(device,answers);
 
-MetalCallKernel(funcName,{bufferLik,bufferAnglesAndResponse,bufferGrid,bufferNoiseModel,bufferAnswers},kernel);
+MetalCallKernel(funcName,{bufferLik,bufferAnglesAndResponse,bufferGrid,bufferNoiseModel,bufferOI,bufferDI,bufferCV,bufferDCV,bufferAnswers},kernel);
+
+debug.answers = single(bufferAnswers);
 
 lik = single(bufferLik);
 lik = reshape(lik,numel(rsp_values),numel(rp_values),numel(alpha_values),numel(op_values),numel(sig_values));
 
-Lik = 10.^lik;
+Lik = 10.^double(lik);
 Lik_prenorm = Lik;
 Lik = Lik./sum(Lik(:));
 
@@ -131,9 +137,7 @@ lik_sig = lik_sig./sum(lik_sig,"all");
 
 %% MAXIMUM LIKELIHOOD CONDITIONS
 [~,ind] = max(Lik,[],'all');
-ind = squeeze(ind);
 [rsp_ml,rp_ml,alpha_ml,op_ml,sig_ml] = ind2sub(size(Lik),ind);
-  % fix here
 dgresp = vis.oridir.doublegaussianfunc(angle_value,...
 	[rsp_values(rsp_ml) rp_values(rp_ml) alpha_values(alpha_ml) op_values(op_ml) sig_values(sig_ml)]);
 OI_ML = OI(rsp_ml,rp_ml,alpha_ml,op_ml,sig_ml);
@@ -144,7 +148,7 @@ DCV_ML = DCV(rsp_ml,rp_ml,alpha_ml,op_ml,sig_ml);
 %% DESCRIPTOR estimation
 
 oi_bins = 0:0.05:1;
-oi_bins = 0:0.05:1;
+di_bins = 0:0.05:1;
 cv_bins = 0:0.05:1;
 dcv_bins = 0:0.05:1;
 
@@ -184,28 +188,28 @@ dcv_lik = dcv_lik./sum(dcv_lik);
 
 %% CREATE OUTPUT_STRUCT
 output_struct = struct( ...
-	'noise_model',struct('type',{'proportional'},'offset',offset,'slope',slope), ...
+	'noise_model',struct('type',{'proportional'},'noise_model',noise_mdl), ...
 	'other_parameters',struct('independent_variable',{'angle'},'independent_variable_value',resp_struct.angles,...
 		'mean_responses',resp_struct.mean_responses,'num_trials',resp_struct.num_trials), ...
 	'marginal_likelihoods',struct( ...
 		'Rsp',struct('values',param_grid.Rsp,'likelihoods',lik_rsp), ...
 		'Rp',struct('values',param_grid.Rp,'likelihoods',lik_rp), ...
 		'Alpha',struct('values',param_grid.Alpha,'likelihoods',lik_alpha), ...
-		'Op',struct('values',param_grid.Op,'likelihoods',lik_op), ...
-		'Sig',struct('values',param_grid.Sig,'likelihoods',lik_sig)), ...
+		'theta_pref',struct('values',param_grid.Op,'likelihoods',lik_op), ...
+		'sigma',struct('values',param_grid.Sig,'likelihoods',lik_sig)), ...
 	'maximum_likelihood_parameters',struct(...
 			'parameters',...
 				struct('Rsp',param_grid.Rsp(rsp_ml),...
 				'Rp',param_grid.Rp(rp_ml),...
-				'Alpha',param_grid.Alpha(alpha_ml),...
-				'Op',param_grid.Op(op_ml),...
-				'Sig',param_grid.Sig(sig_ml)),...
-			'curve',dgresp,...
-			'descriptors', struct('OI',OI_ML, 'DI', DI_ML, 'CV', CV_ML, 'DCV', DCV_ML)),...
+				'Rn',param_grid.Alpha(alpha_ml)*param_grid.Rp(rp_ml),...
+				'theta_pref',param_grid.Op(op_ml),...
+				'sigma',param_grid.Sig(sig_ml)),...
+			'tuning_curve',dgresp,...
+			'descriptors', struct('oi',OI_ML, 'di', DI_ML, 'cv', CV_ML, 'dir_cv', DCV_ML)),...
 	'descriptors', struct(...
-		'OI', struct('values',oi_bins,'likelihoods',oi_lik), ...
-		'DI', struct('values',di_bins,'likelihoods',di_lik), ...
-		'CV', struct('values',cv_bins,'likelihoods',cv_lik), ...
-		'DCV', struct('values',dcv_bins,'likelihoods',dcv_lik) ) );
+		'oi', struct('values',oi_bins,'likelihoods',oi_lik), ...
+		'di', struct('values',di_bins,'likelihoods',di_lik), ...
+		'cv', struct('values',cv_bins,'likelihoods',cv_lik), ...
+		'dir_cv', struct('values',dcv_bins,'likelihoods',dcv_lik) ) );
 
 
