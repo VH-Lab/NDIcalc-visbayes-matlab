@@ -8,9 +8,11 @@ kernel void doubleGaussianProportionalNoiseLog(
     constant float *angles_response_numtrials [[ buffer(1) ]],
     constant float *grid [[ buffer(2) ]], 
     constant float *noise_model [[ buffer(3) ]], 
-    constant float *bin_values[[ buffer(4) ]],
-    device float *histogram_index[[ buffer(5) ]],
-    device float *answers [[ buffer(6) ]],
+    device float *oi[[ buffer(4) ]],
+    device float *di[[ buffer(5) ]],
+    device float *cv[[ buffer(6) ]],
+    device float *dcv[[ buffer(7) ]],
+    device float *answers [[ buffer(8) ]],
     uint id[[ thread_position_in_grid ]])
 {
 
@@ -46,7 +48,6 @@ kernel void doubleGaussianProportionalNoiseLog(
    float cv_numerator_x = 0, cv_numerator_y = 0;
    float dcv_numerator_x = 0, dcv_numerator_y = 0;
    float cv_denominator = 0;
-   float oi_here, di_here, cv_here, dcv_here;
 
    for (uint i=0; i<num_angles;i++) {
       theta = angles_response_numtrials[1+i];
@@ -80,8 +81,8 @@ kernel void doubleGaussianProportionalNoiseLog(
       }
    }
    lik[id] = lik_is_zero ? 10 : log_likelihood;
-   cv_here = 1-sqrt(cv_numerator_x*cv_numerator_x+cv_numerator_y*cv_numerator_y) / cv_denominator;
-   dcv_here = 1-sqrt(dcv_numerator_x*dcv_numerator_x+dcv_numerator_y*dcv_numerator_y) / cv_denominator;
+   cv[id] = 1-sqrt(cv_numerator_x*cv_numerator_x+cv_numerator_y*cv_numerator_y) / cv_denominator;
+   dcv[id] = 1-sqrt(dcv_numerator_x*dcv_numerator_x+dcv_numerator_y*dcv_numerator_y) / cv_denominator;
 
    // to calculate oi and di, need r(theta_p), r(theta_p+180), r(theta_p+90)
    // r(theta_p)
@@ -94,56 +95,11 @@ kernel void doubleGaussianProportionalNoiseLog(
    angdiff1 = 180;
    angdiff2 = 0;
    float r_at_thetap_180 = rsp + rp * exp(-angdiff1*angdiff1/(2*sig*sig)) + alpha * rp * exp(-angdiff2*angdiff2/(2*sig*sig));
-   oi_here = (r_at_thetap + r_at_thetap_180 - 2*r_at_thetap_90) / (r_at_thetap + r_at_thetap_180 + 2*r_at_thetap_90);
-   if (isnan(oi_here) || isinf(oi_here)) oi_here = 0.0;
-   di_here = (r_at_thetap - r_at_thetap_180 )/ (r_at_thetap + r_at_thetap_180 );
-   if (isnan(di_here) || isinf(di_here)) di_here = 0.0;
+   oi[id] = (r_at_thetap + r_at_thetap_180 - 2*r_at_thetap_90) / (r_at_thetap + r_at_thetap_180 + 2*r_at_thetap_90);
+   if (isnan(oi[id]) || isinf(oi[id])) oi[id] = 0.0;
+   di[id] = (r_at_thetap - r_at_thetap_180 )/ (r_at_thetap + r_at_thetap_180 );
+   if (isnan(di[id]) || isinf(di[id])) di[id] = 0.0;
 
-   int N = 4;
-
-   float values[4];
-   values[0] = oi_here;
-   values[1] = di_here;
-   values[2] = cv_here;
-   values[3] = dcv_here;
-   uint16_t bin_labels[4];
-   
-   // Calculate the stride for each dimension (for indexing the multi-dimensional matrix)
-   float stride = 1;
-   float index = 1;
-   int bin_offset = 0;
-   for (int i = 0; i < N; i++) {
-     int num_bins = (int)bin_values[i];
-     float value = values[i];
-    
-     // Binary search for the correct bin
-     int left = 0;
-     int right = num_bins - 1;
-     int bin_index = num_bins; // Default to out-of-bounds bin
-    
-     while (left <= right) {
-       int mid = left + (right - left) / 2;
-       if (value >= bin_values[N + bin_offset + mid] && value < bin_values[N + bin_offset + mid + 1]) {
-         bin_index = mid;
-         break;
-       } else if (value < bin_values[N + bin_offset + mid]) {
-         right = mid - 1;
-       } else {
-         left = mid + 1;
-       }
-     }
-     // Check if the value is greater than the last bin edge
-     if (value > bin_values[N + bin_offset + num_bins - 1]) {
-         bin_index = num_bins; // Out-of-bounds for values greater than the last bin
-     }
-     bin_labels[i] = bin_index + 1; // add one to get answer in Matlab bins
-
-     index += (bin_labels[i]-1) * stride;
-     stride *= (num_bins+1); // we have an extra bin for the out-of-bounds
-     bin_offset += num_bins; // we don't have an set in the bin_values
-  }
-
-   histogram_index[id] = index;
 }
 
 

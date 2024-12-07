@@ -59,20 +59,16 @@ else,
 	noise_mdl = [1;noise_mdl(:)];
 end;
 
-
-
 funcName = 'doubleGaussianProportionalNoiseLog';
 here = which('vis.bayes.double_gaussian.gpudemo');
 [parent,me] = fileparts(here);
-kernel = fileread(fullfile(parent,'doublegaussianproportionalnoise.mtl'));
+kernel = fileread(fullfile(parent,'doublegaussianproportionalnoise_full.mtl'));
 
 lik = zeros(numel(rsp_values)*numel(rp_values)*numel(alpha_values)*numel(op_values)*numel(sig_values),1,'single');
-histogram_index = zeros(numel(rsp_values)*numel(rp_values)*numel(alpha_values)*numel(op_values)*numel(sig_values),1,'single');
-
-oi_bins  = 0:0.05:1.00;
-di_bins  = 0:0.05:1.00;
-cv_bins  = 0:0.05:1.00;
-dcv_bins = 0:0.05:1.00;
+OI = zeros(size(lik),'single');
+DI = zeros(size(lik),'single');
+CV = zeros(size(lik),'single');
+DCV = zeros(size(lik),'single');
 
 if numel(num_trials)~=numel(angle_value),
 	error(['There must be a numtrial entry for each response. The size of RESP_STRUCT.num_trials must match RESP_STRUCT.mean_responses.']);
@@ -90,9 +86,6 @@ grid = single([numel(rsp_values);
         op_values(:);
         sig_values(:)]);
 
-bin_values = single([numel(oi_bins); numel(di_bins); numel(cv_bins); numel(dcv_bins); ...
-  oi_bins(:); di_bins(:); cv_bins(:); dcv_bins(:)]);
-
 answers = single(zeros(100,1));
 
 metalConfig = MetalConfig;
@@ -102,14 +95,16 @@ bufferLik = MetalBuffer(device,lik);
 bufferAnglesAndResponse = MetalBuffer(device,angles_and_response);
 bufferGrid = MetalBuffer(device,grid);
 bufferNoiseModel = MetalBuffer(device,single(noise_mdl));
-bufferBinValues = MetalBuffer(device,bin_values);
-bufferHistogramIndex = MetalBuffer(device,histogram_index);
+bufferOI = MetalBuffer(device,OI);
+bufferDI = MetalBuffer(device,DI);
+bufferCV = MetalBuffer(device,CV);
+bufferDCV = MetalBuffer(device,DCV);
 
 bufferAnswers = MetalBuffer(device,answers);
 
 %disp(['About to call Metal'])
 
-MetalCallKernel(funcName,{bufferLik,bufferAnglesAndResponse,bufferGrid,bufferNoiseModel,bufferBinValues,bufferHistogramIndex,bufferAnswers},kernel);
+MetalCallKernel(funcName,{bufferLik,bufferAnglesAndResponse,bufferGrid,bufferNoiseModel,bufferOI,bufferDI,bufferCV,bufferDCV,bufferAnswers},kernel);
 
 %disp(['Finished with Metal Call'])
 
@@ -118,9 +113,29 @@ debug.answers = single(bufferAnswers);
 lik = single(bufferLik);
 lik = reshape(lik,numel(rsp_values),numel(rp_values),numel(alpha_values),numel(op_values),numel(sig_values));
 
-histogram_index = uint64(single(bufferHistogramIndex));
+%disp(['Finished with lik extract'])
 
-debug.histogram_index = histogram_index;
+OI = single(bufferOI);
+DI = single(bufferDI);
+CV = single(bufferCV);
+DCV = single(bufferDCV);
+
+if 1,
+	debug.OI = OI;
+	debug.DI = DI;
+	debug.CV = CV;
+	debug.DCV = DCV;
+end;
+
+clear bufferDCV bufferCV bufferDI bufferOI bufferLik bufferAnswers
+
+%disp(['Finished with other buffers'])
+
+%% descriptors, same dimensions as Lik
+OI = reshape(OI,numel(rsp_values),numel(rp_values),numel(alpha_values),numel(op_values),numel(sig_values));
+DI = reshape(single(DI),numel(rsp_values),numel(rp_values),numel(alpha_values),numel(op_values),numel(sig_values));
+CV = reshape(CV,numel(rsp_values),numel(rp_values),numel(alpha_values),numel(op_values),numel(sig_values));
+DCV = reshape(DCV,numel(rsp_values),numel(rp_values),numel(alpha_values),numel(op_values),numel(sig_values));
 
 %disp(['Done pulling variable info'])
 
@@ -149,36 +164,71 @@ lik_sig = lik_sig./sum(lik_sig,"all");
 [rsp_ml,rp_ml,alpha_ml,op_ml,sig_ml] = ind2sub(size(Lik),ind);
 dgresp = vis.oridir.doublegaussianfunc(angle_value,...
 	[rsp_values(rsp_ml) rp_values(rp_ml) alpha_values(alpha_ml) op_values(op_ml) sig_values(sig_ml)]);
+OI_ML = OI(rsp_ml,rp_ml,alpha_ml,op_ml,sig_ml);
+DI_ML = DI(rsp_ml,rp_ml,alpha_ml,op_ml,sig_ml);
+CV_ML = CV(rsp_ml,rp_ml,alpha_ml,op_ml,sig_ml);
+DCV_ML = DCV(rsp_ml,rp_ml,alpha_ml,op_ml,sig_ml);
 
 %% DESCRIPTOR estimation
 %disp('Descriptor calculations')
+
+oi_bins = 0:0.05:1.00;
+di_bins = 0:0.05:1.00;
+cv_bins = 0:0.05:1.00;
+dcv_bins = 0:0.05:1.00;
 
 oi_lik = 0 * oi_bins;
 di_lik = 0 * di_bins;
 cv_lik = 0 * cv_bins;
 dcv_lik = 0 * dcv_bins;
 
-maxIndexes = 1+[numel(oi_bins) numel(di_bins) numel(cv_bins) numel(dcv_bins)];
+if 0, % this is slower
+    [oi_index] = discretize(OI(:),oi_bins);
+    valid_indexes = ~isnan(oi_index);
+    oi_lik = accumarray(oi_index(valid_indexes), Lik(valid_indexes), [numel(oi_bins) 1], @(x) sum(x(~isnan(x))), 0);
+    oi_lik = oi_lik ./ sum(oi_lik); 
+    
+    [di_index] = discretize(DI(:),di_bins);
+    di_lik = accumarray(di_index(:), Lik(:), [numel(di_bins) 1], @(x) sum(x(~isnan(x))), 0);
+    di_lik = di_lik./sum(di_lik);
+    
+    [cv_index] = discretize(CV(:),cv_bins);
+    cv_lik = accumarray(cv_index(:), Lik(:), [numel(cv_bins) 1], @(x) sum(x(~isnan(x))), 0);
+    cv_lik = cv_lik./sum(cv_lik);
+    
+    [dcv_index] = discretize(DCV(:),dcv_bins);
+    dcv_lik = accumarray(dcv_index(:), Lik(:), [numel(dcv_bins) 1], @(x) sum(x(~isnan(x))), 0);
+    dcv_lik = dcv_lik./sum(dcv_lik);
+else,
+    [oi_index] = discretize(OI(:),oi_bins);
+    for bin = 1:max(oi_index)
+        F = oi_index==bin;
+        oi_lik(bin) = sum(Lik(F));
+    end
+    oi_lik = oi_lik./sum(oi_lik);
+    
+    [di_index] = discretize(DI(:),di_bins);
+    for bin = 1:max(di_index)
+        F = di_index==bin;
+        di_lik(bin) = sum(Lik(F));
+    end
+    di_lik = di_lik./sum(di_lik);
+    
+    [cv_index] = discretize(CV(:),cv_bins);
+    for bin = 1:max(cv_index)
+        F = cv_index==bin;
+        cv_lik(bin) = sum(Lik(F));
+    end
+    cv_lik = cv_lik./sum(cv_lik);
+    
+    [dcv_index] = discretize(DCV(:),dcv_bins);
+    for bin = 1:max(dcv_index)
+        F = dcv_index==bin;
+        dcv_lik(bin) = sum(Lik(F));
+    end
+    dcv_lik = dcv_lik./sum(dcv_lik);
 
-for i=1:4,
-	indexes = vlt.data.ind2subD(1+[numel(oi_bins) numel(di_bins) numel(cv_bins) numel(dcv_bins)],histogram_index,i);
-	for bin = 1:maxIndexes(i)
-		if i==1,
-			oi_lik(bin) = sum(Lik(indexes==bin));
-		elseif i==2,
-			di_lik(bin) = sum(Lik(indexes==bin));
-		elseif i==3,
-			cv_lik(bin) = sum(Lik(indexes==bin));
-		elseif i==4,
-			dcv_lik(bin) = sum(Lik(indexes==bin));
-		end;
-	end;
 end;
-
-oi_lik = oi_lik./sum(oi_lik);
-di_lik = di_lik./sum(di_lik);
-cv_lik = cv_lik./sum(cv_lik);
-dcv_lik = dcv_lik./sum(dcv_lik);
 
 %% CREATE OUTPUT_STRUCT
 output_struct = struct( ...
@@ -198,10 +248,11 @@ output_struct = struct( ...
 				'Rn',param_grid.Alpha(alpha_ml)*param_grid.Rp(rp_ml),...
 				'theta_pref',param_grid.Op(op_ml),...
 				'sigma',param_grid.Sig(sig_ml)),...
-			'tuning_curve',dgresp),...
+			'tuning_curve',dgresp,...
+			'descriptors', struct('oi',OI_ML, 'di', DI_ML, 'cv', CV_ML, 'dir_cv', DCV_ML)),...
 	'descriptors', struct(...
-		'oi', struct('values',[oi_bins NaN],'likelihoods',oi_lik), ...
-		'di', struct('values',[di_bins NaN],'likelihoods',di_lik), ...
-		'cv', struct('values',[cv_bins NaN],'likelihoods',cv_lik), ...
-		'dir_cv', struct('values',[dcv_bins NaN],'likelihoods',dcv_lik) ) );
+		'oi', struct('values',oi_bins,'likelihoods',oi_lik), ...
+		'di', struct('values',di_bins,'likelihoods',di_lik), ...
+		'cv', struct('values',cv_bins,'likelihoods',cv_lik), ...
+		'dir_cv', struct('values',dcv_bins,'likelihoods',dcv_lik) ) );
 

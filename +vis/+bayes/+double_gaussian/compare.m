@@ -19,12 +19,14 @@ for i=1:numel(marg),
 	assert(mx<0.001,['Data in ' marg{i} ' exceeds tolerance (0.001): ' num2str(mx) '.']);
 end;
 
-v = {'cv','dir_cv','oi','di'};
+v = {'oi','di','cv','dir_cv'};
 
 for i=1:4,
 	s1 = getfield(output_struct1.descriptors,v{i});
 	s2 = getfield(output_struct2.descriptors,v{i});
-	mx = max(s1.likelihoods(:) - s2.likelihoods(:));
+	good_indexes1 = find(~isnan(s1.values(:)));
+	good_indexes2 = find(~isnan(s2.values(:)));
+	mx = max(s1.likelihoods(good_indexes1) - s2.likelihoods(good_indexes2));
 	assert(mx<0.001,['Data in ' v{i} ' exceeds tolerance (0.001): ' num2str(mx) '.']);
 end;
 
