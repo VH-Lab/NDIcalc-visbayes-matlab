@@ -23,6 +23,20 @@ for i=1:5,
     box off;
 end;
 
+subplot(4,3,6);
+angles = 0:359;
+P = [ output_struct.maximum_likelihood_parameters.parameters.Rsp; ...
+      output_struct.maximum_likelihood_parameters.parameters.Rp; ...
+      output_struct.maximum_likelihood_parameters.parameters.Rn; ...
+      output_struct.maximum_likelihood_parameters.parameters.theta_pref; ...
+      output_struct.maximum_likelihood_parameters.parameters.sigma];
+
+r = vis.oridir.doublegaussianfunc(angles,P);
+plot(angles,r,'r-');
+hold on;
+plot(output_struct.other_parameters.independent_variable_value,output_struct.other_parameters.mean_responses,'ko');
+box off;
+
 v = {'oi','di','cv','dir_cv'};
 
 for i=1:4,

@@ -1,9 +1,9 @@
 function [output_struct,lik,debug] = gpudemo(mode)
 
-rsp_values = logspace(log10(0.1),log10(40),4);
-rp_values = logspace(log10(0.1),log10(150),10);
+rsp_values = sort([-logspace(log10(0.1),log10(40),20) logspace(log10(0.1),log10(40),20)]);
+rp_values = logspace(log10(0.1),log10(150),100);
 alpha_values = 0:0.05:1;
-thetap_values = 0:1:359;
+thetap_values = 0:2:359;
 sig_values = 10:5:90;
 
 noise_model = [1.3549 1.9182 0.5461];

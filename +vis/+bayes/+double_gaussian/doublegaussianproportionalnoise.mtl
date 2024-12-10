@@ -64,9 +64,9 @@ kernel void doubleGaussianProportionalNoiseLog(
       dcv_numerator_y += f_eval * sin(theta*PI/180.0);
       if (rsp==0.1 && rp == 10 && alpha == 0.5 && thetapref == 40 && sig == 30) answers[i] = f_eval;
       if (noise_model[0] == 1) {
-        noise_sigma = pow(10,noise_model[2]) * pow(f_eval,noise_model[3])/sqrt(numtrials);
+        noise_sigma = pow(10,noise_model[2]) * pow(abs(f_eval),noise_model[3])/sqrt(numtrials);
       } else {
-        noise_sigma = (noise_model[1] + noise_model[2] * pow(f_eval,noise_model[3]))/sqrt(numtrials);
+        noise_sigma = (noise_model[1] + noise_model[2] * pow(abs(f_eval),noise_model[3]))/sqrt(numtrials);
       }
       if (rsp==0.1 && rp == 10 && alpha == 0.5 && thetapref == 40 && sig == 30) answers[15+i] = noise_sigma;
       if (noise_sigma>0) {
@@ -80,8 +80,9 @@ kernel void doubleGaussianProportionalNoiseLog(
       }
    }
    lik[id] = lik_is_zero ? 10 : log_likelihood;
-   cv_here = 1-sqrt(cv_numerator_x*cv_numerator_x+cv_numerator_y*cv_numerator_y) / cv_denominator;
-   dcv_here = 1-sqrt(dcv_numerator_x*dcv_numerator_x+dcv_numerator_y*dcv_numerator_y) / cv_denominator;
+   cv_here = 1-(sqrt(cv_numerator_x*cv_numerator_x+cv_numerator_y*cv_numerator_y) / cv_denominator);
+   dcv_here = 1-(sqrt(dcv_numerator_x*dcv_numerator_x+dcv_numerator_y*dcv_numerator_y) / cv_denominator);
+   dcv_here = fmin(dcv_here,1);
 
    // to calculate oi and di, need r(theta_p), r(theta_p+180), r(theta_p+90)
    // r(theta_p)
@@ -119,11 +120,15 @@ kernel void doubleGaussianProportionalNoiseLog(
      // Binary search for the correct bin
      int left = 0;
      int right = num_bins - 1;
+     int mid;
      int bin_index = num_bins; // Default to out-of-bounds bin
     
      while (left <= right) {
-       int mid = left + (right - left) / 2;
+       mid = left + (right - left) / 2;
        if (value >= bin_values[N + bin_offset + mid] && value < bin_values[N + bin_offset + mid + 1]) {
+         bin_index = mid;
+         break;
+       } else if (value >= bin_values[N + bin_offset + mid] && (mid==num_bins-1)) { // if we are at the edge we found it
          bin_index = mid;
          break;
        } else if (value < bin_values[N + bin_offset + mid]) {
@@ -135,8 +140,16 @@ kernel void doubleGaussianProportionalNoiseLog(
      // Check if the value is greater than the last bin edge
      if (value > bin_values[N + bin_offset + num_bins - 1]) {
          bin_index = num_bins; // Out-of-bounds for values greater than the last bin
+         if (value==1) answers[96] = bin_labels[i];
      }
      bin_labels[i] = bin_index + 1; // add one to get answer in Matlab bins
+     if (value==1) {
+         answers[89] = 5;
+         answers[90] = bin_values[N + bin_offset + mid];
+         answers[91] = bin_values[N + bin_offset + mid + 1];
+         answers[97] = bin_labels[i];
+         answers[98] = bin_values[N + bin_offset + num_bins - 1];
+     }
 
      index += (bin_labels[i]-1) * stride;
      stride *= (num_bins+1); // we have an extra bin for the out-of-bounds

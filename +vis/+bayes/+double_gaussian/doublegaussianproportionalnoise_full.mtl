@@ -65,9 +65,9 @@ kernel void doubleGaussianProportionalNoiseLog(
       dcv_numerator_y += f_eval * sin(theta*PI/180.0);
       if (rsp==0.1 && rp == 10 && alpha == 0.5 && thetapref == 40 && sig == 30) answers[i] = f_eval;
       if (noise_model[0] == 1) {
-        noise_sigma = pow(10,noise_model[2]) * pow(f_eval,noise_model[3])/sqrt(numtrials);
+        noise_sigma = pow(10,noise_model[2]) * pow(abs(f_eval),noise_model[3])/sqrt(numtrials);
       } else {
-        noise_sigma = (noise_model[1] + noise_model[2] * pow(f_eval,noise_model[3]))/sqrt(numtrials);
+        noise_sigma = (noise_model[1] + noise_model[2] * pow(abs(f_eval),noise_model[3]))/sqrt(numtrials);
       }
       if (rsp==0.1 && rp == 10 && alpha == 0.5 && thetapref == 40 && sig == 30) answers[15+i] = noise_sigma;
       if (noise_sigma>0) {
@@ -81,8 +81,9 @@ kernel void doubleGaussianProportionalNoiseLog(
       }
    }
    lik[id] = lik_is_zero ? 10 : log_likelihood;
-   cv[id] = 1-sqrt(cv_numerator_x*cv_numerator_x+cv_numerator_y*cv_numerator_y) / cv_denominator;
-   dcv[id] = 1-sqrt(dcv_numerator_x*dcv_numerator_x+dcv_numerator_y*dcv_numerator_y) / cv_denominator;
+   cv[id] = 1-(sqrt(cv_numerator_x*cv_numerator_x+cv_numerator_y*cv_numerator_y) / cv_denominator);
+   dcv[id] = 1-(sqrt(dcv_numerator_x*dcv_numerator_x+dcv_numerator_y*dcv_numerator_y) / cv_denominator);
+   dcv[id] = fmin(dcv[id],1);
 
    // to calculate oi and di, need r(theta_p), r(theta_p+180), r(theta_p+90)
    // r(theta_p)
